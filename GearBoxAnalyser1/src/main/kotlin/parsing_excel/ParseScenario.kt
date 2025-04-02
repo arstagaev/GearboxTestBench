@@ -10,6 +10,7 @@ import parsing_excel.models.SolenoidHolder
 import utils.*
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
 var wholeSheet = mutableListOf<MutableList<String>>()
 suspend fun targetParseScenario(inputScenario: File?) : Boolean {
@@ -77,17 +78,17 @@ suspend fun targetParseScenario(inputScenario: File?) : Boolean {
 
 
     repeat(8) {
-//        var asd = arrayListOf<String>(
-//            wholeSheet[2][it+1],
-//            wholeSheet[3][it+1],
-//            wholeSheet[4][it+1],
-//            wholeSheet[5][it+1],
-//            wholeSheet[6][it+1],
-//            wholeSheet[7][it+1],
-//            wholeSheet[8][it+1],
-//            wholeSheet[9][it+1]
-//        )
-//        println("cooopppppyyy ${it} ${asd.joinToString()} ${pressures.size}")
+        var asd = arrayListOf<String>(
+            wholeSheet[2][it+1],
+            wholeSheet[3][it+1],
+            wholeSheet[4][it+1],
+            wholeSheet[5][it+1],
+            wholeSheet[6][it+1],
+            wholeSheet[7][it+1],
+            wholeSheet[8][it+1],
+            wholeSheet[9][it+1]
+        )
+        println("cooopppppyyy ${it} ${asd.joinToString()} ${pressures.size}")
         //incr++
         pressures.add(
             PressuresHolder(
@@ -198,4 +199,82 @@ suspend fun targetParseScenario(inputScenario: File?) : Boolean {
         writeToExcel(0,0, chartFileStandard.value.name)
     }
     return true
+}
+
+
+fun createDemoScenarioXLS(filePath: String) {
+    val workbook = HSSFWorkbook()
+    val sheet = workbook.createSheet("ScenarioDemo")
+
+    // Header
+    sheet.createRow(0).createCell(0).setCellValue("StandardFile.txt")
+
+    // Pressures (Rows 2-10)
+    val pressureHeaders = listOf("Name", "Index", "MinValue", "MaxValue", "Tolerance", "Unit", "Comment", "Color", "Visibility")
+    val pressureData = listOf(
+        listOf("Pressure1", 1, 10, 100, 5, "bar", "Pressure 1", "#FF0000", true),
+        listOf("Pressure2", 2, 20, 200, 10, "psi", "Pressure 2", "#00FF00", true),
+        listOf("Pressure3", 3, 30, 300, 15, "kPa", "Pressure 3", "#0000FF", false),
+    )
+
+    for ((index, header) in pressureHeaders.withIndex()) {
+        val row = sheet.createRow(index + 2)
+        row.createCell(0).setCellValue(header)
+        pressureData.forEachIndexed { colIndex, data ->
+            row.createCell(colIndex + 1).apply {
+                when (val value = data[index]) {
+                    is Int -> setCellValue(value.toDouble())
+                    is Boolean -> setCellValue(value.toString())
+                    else -> setCellValue(value as String)
+                }
+            }
+        }
+    }
+
+    // Solenoids (Rows 14-22)
+    val solenoidHeaders = listOf("Name", "Index", "MaxPWM", "Step", "Color", "Frequency", "ExpectedTestValue", "CurrentMaxValue", "Visibility")
+    val solenoidData = listOf(
+        listOf("Solenoid1", 1, 255, 5, "#AAAAAA", 50, 128, 200, true),
+        listOf("Solenoid2", 2, 200, 10, "#BBBBBB", 60, 100, 150, false),
+        listOf("Solenoid3", 3, 150, 15, "#CCCCCC", 70, 75, 100, true),
+    )
+
+    for ((index, header) in solenoidHeaders.withIndex()) {
+        val row = sheet.createRow(index + 14)
+        row.createCell(0).setCellValue(header)
+        solenoidData.forEachIndexed { colIndex, data ->
+            row.createCell(colIndex + 1).apply {
+                when (val value = data[index]) {
+                    is Int -> setCellValue(value.toDouble())
+                    is Boolean -> setCellValue(value.toString())
+                    else -> setCellValue(value as String)
+                }
+            }
+        }
+    }
+
+    // Scenario steps (from row 27 onwards)
+    val scenarioSteps = listOf(
+        listOf(1000, 10, 20, 30, 40, 50, 60, 70, 80, "Step 1", "Initial setup"),
+        listOf(2000, 15, 25, 35, 45, 55, 65, 75, 85, "Step 2", "Middle step"),
+        listOf(1500, 20, 30, 40, 50, 60, 70, 80, 90, "Step 3", "Final step"),
+    )
+
+    scenarioSteps.forEachIndexed { index, stepData ->
+        val row = sheet.createRow(index + 27)
+        stepData.forEachIndexed { colIndex, data ->
+            row.createCell(colIndex).apply {
+                when (data) {
+                    is Int -> setCellValue(data.toDouble())
+                    else -> setCellValue(data as String)
+                }
+            }
+        }
+    }
+
+    // Write to file
+    FileOutputStream(File(filePath)).use { outputStream ->
+        workbook.write(outputStream)
+        workbook.close()
+    }
 }

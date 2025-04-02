@@ -49,7 +49,7 @@ var OPERATOR_ID = "no name"
 var SOUND_ENABLED = 1
 var LAST_SCENARIO = Dir9Scenario
 var DELAY_BEFORE_CHART = 2000
-var SAVELOG = true
+var SAVELOG = false
 
 var solenoids = mutableListOf<SolenoidHolder>()
 var pressures = mutableListOf<PressuresHolder>()

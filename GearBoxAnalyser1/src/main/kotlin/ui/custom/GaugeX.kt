@@ -192,14 +192,14 @@ fun GaugeX(inputSize: DpSize, progress : Int, minType : Int, maxType: Int, type:
                         txtPaint.color = org.jetbrains.skia.Color.GREEN
 
 
-                        val typeFace = org.jetbrains.skia.Typeface("TimesRoman", FontStyle.BOLD)
-
-                        canvas.nativeCanvas.drawTextLine(
-                            TextLine.Companion.make("${if (it == 8) maxType else{ (minType+it*valueOfDivision).roundToInt()}}", Font(typeFace, (inputSize.height.value*0.05f))),
-                            positionX,
-                            positionY,
-                            txtPaint
-                        )
+//                        val typeFace = org.jetbrains.skia.Typeface("TimesRoman", FontStyle.BOLD)
+//
+//                        canvas.nativeCanvas.drawTextLine(
+//                            TextLine.Companion.make("${if (it == 8) maxType else{ (minType+it*valueOfDivision).roundToInt()}}", Font(typeFace, (inputSize.height.value*0.05f))),
+//                            positionX,
+//                            positionY,
+//                            txtPaint
+//                        )
                     }
                 }
 

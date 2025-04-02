@@ -18,6 +18,7 @@ import androidx.compose.ui.window.singleWindowApplication
 import enums.ExplorerMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
+import parsing_excel.createDemoScenarioXLS
 import parsing_excel.writeToExcel
 import serial_port.comparatorToSolenoid
 import serial_port.pauseSerialComm
@@ -102,7 +103,7 @@ fun main() = application (
         //readExcelFile()
 
         //var initParameters = readParameters(Dir4MainConfig)
-
+        //createDemoScenarioXLS("demo_scenario.xls")
 
         initialize(readParameters(Dir4MainConfig_Txt))
 

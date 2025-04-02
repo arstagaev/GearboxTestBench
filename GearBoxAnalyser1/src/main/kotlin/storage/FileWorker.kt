@@ -96,6 +96,7 @@ fun readParameters(file: File) : List<ParameterCommon> {
 
 fun refreshParameters() {
     logAct("createParameters")
+    createNeededFolders()
     //"comport" -> COM_P
     //"baudrate" -> BAUD
     ////"is_demo" ->
