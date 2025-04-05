@@ -1,0 +1,299 @@
+package ui.charts.new
+
+import androidx.compose.desktop.ui.tooling.preview.Preview
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.application
+import org.jfree.chart.ChartFactory
+import org.jfree.chart.ChartPanel
+import org.jfree.chart.JFreeChart
+import org.jfree.chart.plot.PlotOrientation
+import org.jfree.data.xy.XYSeries
+import org.jfree.data.xy.XYSeriesCollection
+import java.io.File
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.round
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+// Creates a dataset from a log file (ignores header lines starting with '#').
+// The optional prefix is added to each series key.
+private fun createDatasetFromLogFile(file: File, prefix: String = ""): XYSeriesCollection {
+    val seriesList = List(16) { index -> XYSeries("$prefix" + "Series ${index + 1}") }
+    file.forEachLine { line ->
+        val trimmed = line.trim()
+        if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
+            val items = trimmed.split(";")
+            if (items.size >= 16) {
+                val xValue = seriesList[0].itemCount.toDouble()
+                for (i in 0 until 16) {
+                    val yValue = items[i].toIntOrNull() ?: 0
+                    seriesList[i].add(xValue, yValue.toDouble())
+                }
+            }
+        }
+    }
+    return XYSeriesCollection().apply { seriesList.forEach { addSeries(it) } }
+}
+
+// Creates a JFreeChart line chart from the given dataset.
+private fun createLineChart(dataset: XYSeriesCollection): JFreeChart {
+    return ChartFactory.createXYLineChart(
+        "Log File Line Chart",   // chart title
+        "Sample Index",          // x-axis label
+        "Value",                 // y-axis label
+        dataset,                 // data
+        PlotOrientation.VERTICAL,
+        true,                    // include legend
+        true,                    // tooltips
+        false                    // urls
+    )
+}
+
+// Computes a naive DFT on a series' Y values, returning a new series of (frequency, magnitude)
+private fun computeSpectralData(series: XYSeries): XYSeries {
+    val N = series.itemCount
+    val yValues = (0 until N).map { series.getY(it).toDouble() }
+    val spectralSeries = XYSeries("${series.key} FFT")
+    val halfN = N / 2
+    for (k in 0..halfN) {
+        var re = 0.0
+        var im = 0.0
+        for (n in 0 until N) {
+            val angle = 2 * Math.PI * k * n / N
+            re += yValues[n] * cos(angle)
+            im -= yValues[n] * sin(angle)
+        }
+        val magnitude = sqrt(re * re + im * im) / N
+        spectralSeries.add(k.toDouble(), magnitude)
+    }
+    return spectralSeries
+}
+
+// Data class holding statistics for a series.
+private data class SeriesStats3(val min: Double, val max: Double, val avg: Double, val median: Double)
+
+// Rounds a value to a specified number of decimals.
+private fun roundValue(value: Double, decimals: Int): Double {
+    val factor = 10.0.pow(decimals.toDouble())
+    return round(value * factor) / factor
+}
+
+// Computes min, max, average, and median for a series, with rounding.
+private fun computeStatData(series: XYSeries): SeriesStats3 {
+    val values = (0 until series.itemCount).map { series.getY(it).toDouble() }
+    if (values.isEmpty()) return SeriesStats3(0.0, 0.0, 0.0, 0.0)
+    val minRaw = values.minOrNull() ?: 0.0
+    val maxRaw = values.maxOrNull() ?: 0.0
+    val avgRaw = values.average()
+    val sorted = values.sorted()
+    val medianRaw = if (sorted.size % 2 == 1) sorted[sorted.size / 2] else (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2.0
+    val min = roundValue(minRaw, 2)
+    val max = roundValue(maxRaw, 2)
+    val avg = roundValue(avgRaw, 3)
+    val median = roundValue(medianRaw, 3)
+    return SeriesStats3(min, max, avg, median)
+}
+
+@Composable
+private fun JFreeChartDemoWithMultipleFiles() {
+    // Files for two datasets.
+    val file1 = File("generated_chart.txt")
+    val file2 = File("generated_chart2.txt")
+
+    // Create datasets.
+    val fullDataset1 = createDatasetFromLogFile(file1)  // keys: "Series 1", "Series 2", ..., "Series 16"
+    val fullDataset2 = createDatasetFromLogFile(file2, "F2 ") // keys: "F2 Series 1", "F2 Series 2", ..., "F2 Series 16"
+
+    // Extract series from each dataset.
+    val allSeries1 = remember {
+        mutableStateListOf<XYSeries>().apply {
+            for (i in 0 until fullDataset1.seriesCount) {
+                add(fullDataset1.getSeries(i))
+            }
+        }
+    }
+    val allSeries2 = remember {
+        mutableStateListOf<XYSeries>().apply {
+            for (i in 0 until fullDataset2.seriesCount) {
+                add(fullDataset2.getSeries(i))
+            }
+        }
+    }
+    val seriesCount1 = allSeries1.size
+    val seriesCount2 = allSeries2.size
+
+    // Visibility states for each series in file1 and file2.
+    val visibleStates1 = remember { mutableStateListOf<Boolean>().apply { repeat(seriesCount1) { add(true) } } }
+    val visibleStates2 = remember { mutableStateListOf<Boolean>().apply { repeat(seriesCount2) { add(true) } } }
+
+    // Toggle for spectral analysis (applies to both files).
+    var showSpectral by remember { mutableStateOf(false) }
+
+    // Derived state: combine visible series from both files.
+    val currentDataset by derivedStateOf {
+        XYSeriesCollection().apply {
+            for (i in allSeries1.indices) {
+                if (visibleStates1[i]) {
+                    if (showSpectral)
+                        addSeries(computeSpectralData(allSeries1[i]))
+                    else
+                        addSeries(allSeries1[i])
+                }
+            }
+            for (i in allSeries2.indices) {
+                if (visibleStates2[i]) {
+                    if (showSpectral)
+                        addSeries(computeSpectralData(allSeries2[i]))
+                    else
+                        addSeries(allSeries2[i])
+                }
+            }
+        }
+    }
+
+    // LazyRow states and scrolling for file1 and file2 toggle rows.
+    val listState1 = rememberLazyListState()
+    val listState2 = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    var scrollPositionSeries1 by remember { mutableStateOf(0) }
+    var scrollPositionSeries2 by remember { mutableStateOf(0) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Switcher row for Raw vs Spectral view.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(2.dp).weight(0.5f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text("Display: ", fontSize = TextUnit(12f, TextUnitType.Sp))
+            Text(
+                text = if (showSpectral) "Spectral Analysis" else "Raw Data",
+                modifier = Modifier.clickable { showSpectral = !showSpectral },
+                color = Color.Blue,
+                fontSize = TextUnit(12f, TextUnitType.Sp)
+            )
+        }
+        // Row for toggles for File 1 series.
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Text("File 1 Series", fontSize = TextUnit(12f, TextUnitType.Sp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(1.dp),
+                state = listState1
+            ) {
+                for (i in 0 until seriesCount1) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 1.dp)
+                                .background(if (visibleStates1[i]) Color.Green else Color.LightGray)
+                                .clickable { visibleStates1[i] = !visibleStates1[i] },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val statData = computeStatData(allSeries1[i])
+                            Text(
+                                fontSize = TextUnit(10f, TextUnitType.Sp),
+                                text = buildAnnotatedString {
+                                    withStyle(style = ParagraphStyle(lineHeight = 10.sp)) {
+                                        withStyle(
+                                            style = SpanStyle(color = Color.Blue, fontWeight = FontWeight.Bold)
+                                        ) {
+                                            append("F1 s. ${i + 1}")
+                                        }
+                                        append("\nmin = ${statData.min}")
+                                        append("\nmax = ${statData.max}")
+                                        append("\navg = ${statData.avg}")
+                                        append("\nmed = ${statData.median}")
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        // Row for toggles for File 2 series.
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Text("File 2 Series", fontSize = TextUnit(12f, TextUnitType.Sp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(1.dp),
+                state = listState2
+            ) {
+                for (i in 0 until seriesCount2) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 1.dp)
+                                .background(if (visibleStates2[i]) Color.Green else Color.LightGray)
+                                .clickable { visibleStates2[i] = !visibleStates2[i] },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val statData = computeStatData(allSeries2[i])
+                            Text(
+                                fontSize = TextUnit(10f, TextUnitType.Sp),
+                                text = buildAnnotatedString {
+                                    withStyle(style = ParagraphStyle(lineHeight = 10.sp)) {
+                                        withStyle(
+                                            style = SpanStyle(color = Color.Blue, fontWeight = FontWeight.Bold)
+                                        ) {
+                                            append("F2 s. ${i + 1}")
+                                        }
+                                        append("\nmin = ${statData.min}")
+                                        append("\nmax = ${statData.max}")
+                                        append("\navg = ${statData.avg}")
+                                        append("\nmed = ${statData.median}")
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Re-create ChartPanel when currentDataset changes.
+        key(currentDataset) {
+            SwingPanel(
+                modifier = Modifier.fillMaxSize().weight(10f),
+                factory = { ChartPanel(createLineChart(currentDataset)) }
+            )
+        }
+    }
+}
+
+@Composable
+@Preview
+private fun PreviewJFreeChartDemoWithMultipleFiles() {
+    MaterialTheme {
+        JFreeChartDemoWithMultipleFiles()
+    }
+}
+
+fun main() = application {
+    Window(onCloseRequest = ::exitApplication, title = "Analysis") {
+        MaterialTheme {
+            JFreeChartDemoWithMultipleFiles()
+        }
+    }
+}
