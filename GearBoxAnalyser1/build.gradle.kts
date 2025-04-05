@@ -31,7 +31,7 @@ dependencies {
     implementation("org.apache.poi:poi:5.0.0")
 
     implementation("org.jfree:jcommon:1.0.24")
-    implementation("org.jfree:jfreechart:1.5.3")
+    implementation("org.jfree:jfreechart:1.5.5")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
 }
 
@@ -42,7 +42,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "MCM"
-            packageVersion = "1.2.8"
+            packageVersion = "1.3.0"
         }
 
         buildTypes.release {
