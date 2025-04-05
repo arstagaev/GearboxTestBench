@@ -29,16 +29,25 @@ import org.jfree.chart.ChartFactory
 import org.jfree.chart.ChartPanel
 import org.jfree.chart.JFreeChart
 import org.jfree.chart.plot.PlotOrientation
+import org.jfree.chart.plot.ValueMarker
+import org.jfree.chart.plot.XYPlot
 import org.jfree.data.xy.XYSeries
 import org.jfree.data.xy.XYSeriesCollection
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import utils.logInfo
+import java.awt.BasicStroke
+import java.awt.Color as AwtColor
 import java.io.File
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
-// work well
+
+// ---- Data Loading and Chart Creation ----
+
 // Creates a dataset from a log file (ignores header lines starting with '#').
 // The optional prefix is added to each series key.
 private fun createDatasetFromLogFile(file: File, prefix: String = ""): XYSeriesCollection {
@@ -73,6 +82,8 @@ private fun createLineChart(dataset: XYSeriesCollection): JFreeChart {
     )
 }
 
+// ---- Spectral Analysis Helper ----
+
 // Computes a naive DFT on a series' Y values, returning a new series of (frequency, magnitude)
 private fun computeSpectralData(series: XYSeries): XYSeries {
     val N = series.itemCount
@@ -93,8 +104,10 @@ private fun computeSpectralData(series: XYSeries): XYSeries {
     return spectralSeries
 }
 
+// ---- Statistics & Correlation Helpers ----
+
 // Data class holding statistics for a series.
-private data class SeriesStats4(val min: Double, val max: Double, val avg: Double, val median: Double)
+private data class SeriesStats5(val min: Double, val max: Double, val avg: Double, val median: Double)
 
 // Rounds a value to a specified number of decimals.
 private fun roundValue(value: Double, decimals: Int): Double {
@@ -103,9 +116,9 @@ private fun roundValue(value: Double, decimals: Int): Double {
 }
 
 // Computes min, max, average, and median for a series, with rounding.
-private fun computeStatData(series: XYSeries): SeriesStats4 {
+private fun computeStatData(series: XYSeries): SeriesStats5 {
     val values = (0 until series.itemCount).map { series.getY(it).toDouble() }
-    if (values.isEmpty()) return SeriesStats4(0.0, 0.0, 0.0, 0.0)
+    if (values.isEmpty()) return SeriesStats5(0.0, 0.0, 0.0, 0.0)
     val minRaw = values.minOrNull() ?: 0.0
     val maxRaw = values.maxOrNull() ?: 0.0
     val avgRaw = values.average()
@@ -116,7 +129,7 @@ private fun computeStatData(series: XYSeries): SeriesStats4 {
     val max = roundValue(maxRaw, 2)
     val avg = roundValue(avgRaw, 3)
     val median = roundValue(medianRaw, 3)
-    return SeriesStats4(min, max, avg, median)
+    return SeriesStats5(min, max, avg, median)
 }
 
 // Computes Pearson correlation coefficient between two series.
@@ -133,25 +146,42 @@ private fun pearsonCorrelation(series1: XYSeries, series2: XYSeries): Double {
 }
 
 // Returns a color interpolated between red and green based on the correlation value.
-// Closer to 1.0 gives green, closer to 0.0 gives red.
+// Closer to 1.0 gives green; closer to 0.0 gives red.
 private fun correlationColor(corr: Double): Color {
     val clamped = corr.coerceIn(0.0, 1.0)
-    val red = (1.0 - clamped).toFloat() // 1.0 => full red, 0.0 => no red
-    val green = clamped.toFloat()       // 1.0 => full green, 0.0 => no green
+    val red = (1.0 - clamped).toFloat()
+    val green = clamped.toFloat()
     return Color(red, green, 0f)
 }
+
+// ---- Threshold Parsing ----
+
+@Serializable
+data class ChartThresholds(val top: Double, val bottom: Double)
+
+// Parses a JSON file and returns the thresholds.
+private fun loadThresholdsFromJson(file: File): ChartThresholds {
+    val jsonString = file.readText()
+    // Optionally, configure the JSON parser (e.g., ignore unknown keys)
+    return Json { ignoreUnknownKeys = true }.decodeFromString(jsonString)
+}
+
+// ---- Main Composable ----
 
 @Composable
 private fun JFreeChartDemoWithMultipleFiles() {
     // Files for two datasets.
     val file1 = File("standard_file.txt")
     val file2 = File("visibility_file.txt")
+    // File for thresholds.
+    val thresholdsFile = File("thresholds.json")
+    val thresholds = remember { loadThresholdsFromJson(thresholdsFile) }
 
     // Create datasets.
-    val fullDataset1 = createDatasetFromLogFile(file1)  // keys: "Series 1", "Series 2", ..., "Series 16"
-    val fullDataset2 = createDatasetFromLogFile(file2, "F2 ") // keys: "F2 Series 1", "F2 Series 2", ..., "F2 Series 16"
+    val fullDataset1 = createDatasetFromLogFile(file1)  // keys: "Series 1", ..., "Series 16"
+    val fullDataset2 = createDatasetFromLogFile(file2, "F2 ") // keys: "F2 Series 1", ..., "F2 Series 16"
 
-    // Extract series from each dataset.
+    // Extract series.
     val allSeries1 = remember {
         mutableStateListOf<XYSeries>().apply {
             for (i in 0 until fullDataset1.seriesCount) {
@@ -169,11 +199,11 @@ private fun JFreeChartDemoWithMultipleFiles() {
     val seriesCount1 = allSeries1.size
     val seriesCount2 = allSeries2.size
 
-    // Visibility states for each series in file1 and file2.
+    // Visibility states.
     val visibleStates1 = remember { mutableStateListOf<Boolean>().apply { repeat(seriesCount1) { add(true) } } }
     val visibleStates2 = remember { mutableStateListOf<Boolean>().apply { repeat(seriesCount2) { add(true) } } }
 
-    // Toggle for spectral analysis (applies to both files).
+    // Toggle for spectral analysis.
     var showSpectral by remember { mutableStateOf(false) }
 
     // Derived state: combine visible series from both files.
@@ -181,33 +211,37 @@ private fun JFreeChartDemoWithMultipleFiles() {
         XYSeriesCollection().apply {
             for (i in allSeries1.indices) {
                 if (visibleStates1[i]) {
-                    if (showSpectral) addSeries(computeSpectralData(allSeries1[i]))
-                    else addSeries(allSeries1[i])
+                    if (showSpectral)
+                        addSeries(computeSpectralData(allSeries1[i]))
+                    else
+                        addSeries(allSeries1[i])
                 }
             }
             for (i in allSeries2.indices) {
                 if (visibleStates2[i]) {
-                    if (showSpectral) addSeries(computeSpectralData(allSeries2[i]))
-                    else addSeries(allSeries2[i])
+                    if (showSpectral)
+                        addSeries(computeSpectralData(allSeries2[i]))
+                    else
+                        addSeries(allSeries2[i])
                 }
             }
         }
     }
 
+    // Derived state for Pearson correlations (for corresponding series).
+    val correlationList by derivedStateOf {
+        val n = minOf(seriesCount1, seriesCount2)
+        List(n) { i -> pearsonCorrelation(allSeries1[i], allSeries2[i]) }
+    }
 
-    // LazyRow states and scrolling for file1 and file2 toggle rows.
+    // LazyRow states for toggle rows.
     val listState1 = rememberLazyListState()
     val listState2 = rememberLazyListState()
     val listStateCorr = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var scrollPositionSeries1 by remember { mutableStateOf(0) }
     var scrollPositionSeries2 by remember { mutableStateOf(0) }
-
-    // Derived state for correlation: for each corresponding series (from file1 and file2), compute Pearson correlation.
-    val correlationList by derivedStateOf {
-        val n = minOf(seriesCount1, seriesCount2)
-        List(n) { i -> pearsonCorrelation(allSeries1[i], allSeries2[i]) }
-    }
+    var scrollPositionCorr by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Switcher row for Raw vs Spectral view.
@@ -302,7 +336,10 @@ private fun JFreeChartDemoWithMultipleFiles() {
         }
         // Row for correlation between corresponding File 1 and File 2 series.
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Text("Correlation (Pearson) for corresponding series", fontSize = TextUnit(12f, TextUnitType.Sp))
+            Text(
+                "Correlation (Pearson) for corresponding series",
+                fontSize = TextUnit(12f, TextUnitType.Sp)
+            )
             LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(1.dp),
                 state = listStateCorr
@@ -323,7 +360,7 @@ private fun JFreeChartDemoWithMultipleFiles() {
                                 fontSize = TextUnit(10f, TextUnitType.Sp)
                             )
                             Text(
-                                text = "${roundValue(correlationList[i], 2)}",
+                                text = "${roundValue(corr, 2)}",
                                 fontSize = TextUnit(10f, TextUnitType.Sp)
                             )
                         }
@@ -331,12 +368,33 @@ private fun JFreeChartDemoWithMultipleFiles() {
                 }
             }
         }
+        // Row for threshold markers (if desired, you could display current thresholds here).
+        // For this example, we simply display the loaded thresholds.
+        Column(modifier = Modifier.fillMaxWidth().weight(0.5f), horizontalAlignment = Alignment.CenterHorizontally) {
+            val thresholds = remember { loadThresholdsFromJson(File("thresholds.json")) }
+            Text("Thresholds: top = ${thresholds.top}, bottom = ${thresholds.bottom}", fontSize = TextUnit(12f, TextUnitType.Sp))
+        }
         Spacer(modifier = Modifier.height(8.dp))
         // Re-create ChartPanel when currentDataset changes.
         key(currentDataset) {
             SwingPanel(
                 modifier = Modifier.fillMaxSize().weight(10f),
-                factory = { ChartPanel(createLineChart(currentDataset)) }
+                factory = {
+                    // Create chart, then add threshold markers.
+                    val chart = createLineChart(currentDataset)
+                    val plot = chart.plot as? XYPlot
+                    if (plot != null) {
+                        val topMarker = ValueMarker(thresholds.top)
+                        topMarker.paint = AwtColor.BLUE
+                        topMarker.stroke = BasicStroke(2.0f)
+                        plot.addRangeMarker(topMarker)
+                        val bottomMarker = ValueMarker(thresholds.bottom)
+                        bottomMarker.paint = AwtColor.RED
+                        bottomMarker.stroke = BasicStroke(2.0f)
+                        plot.addRangeMarker(bottomMarker)
+                    }
+                    ChartPanel(chart)
+                }
             )
         }
     }
@@ -350,7 +408,7 @@ private fun PreviewJFreeChartDemoWithMultipleFiles() {
     }
 }
 
-fun main() = application {
+private fun main() = application {
     Window(onCloseRequest = ::exitApplication, title = "Analysis") {
         MaterialTheme {
             JFreeChartDemoWithMultipleFiles()

@@ -4,6 +4,8 @@ plugins {
     kotlin("jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
+
+    kotlin("plugin.serialization") version "1.9.0"
 }
 
 group = "com.gearboxtestapp"
@@ -32,7 +34,10 @@ dependencies {
 
     implementation("org.jfree:jcommon:1.0.24")
     implementation("org.jfree:jfreechart:1.5.5")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
+//    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.1")
+    // https://mvnrepository.com/artifact/org.jetbrains.kotlin/kotlin-serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
+
 }
 
 compose.desktop {
