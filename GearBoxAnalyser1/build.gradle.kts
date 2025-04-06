@@ -46,7 +46,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "MCM"
+            packageName = "MCMGearBoxAnalyser"
             packageVersion = "1.3.0"
         }
 

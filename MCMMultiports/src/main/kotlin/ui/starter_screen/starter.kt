@@ -108,7 +108,7 @@ fun StarterScreen() {
                 modifier = Modifier//.fillMaxSize()
                     .padding(top = 20.dp).clickable {
                     //screenNav.value = Screens.MAIN
-                }, fontSize = 50.sp, fontFamily = fontRoboGirls, color = Color.White, textAlign = TextAlign.Center)
+                }, fontSize = 50.sp, fontFamily = fontRoboGirls, color = Color.White, textAlign = TextAlign.Justify)
         }
         Row(modifier = Modifier.fillMaxSize().weight(3f).background(Color.Black), horizontalArrangement = Arrangement.Center) {
 //            Image(

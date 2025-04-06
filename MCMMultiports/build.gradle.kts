@@ -9,6 +9,7 @@ plugins {
 
 group = "com.gearboxanalyser"
 version = "1.0-SNAPSHOT"
+var isWindows = true
 
 repositories {
     mavenCentral()
@@ -22,7 +23,7 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     //implementation(compose.desktop.currentOs)
-    //isWindows = compose.desktop.currentOs.contains("win", ignoreCase = true)
+    isWindows = compose.desktop.currentOs.contains("win", ignoreCase = true)
 
     implementation(compose.desktop.windows_x64)
     implementation(compose.desktop.macos_arm64)
@@ -45,7 +46,7 @@ compose.desktop {
         mainClass = "MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "MCM"
+            packageName = "MCMMaster"
             packageVersion = version
         }
         buildTypes.release {

@@ -4,7 +4,12 @@ import storage.writeToFile
 
 fun logAct(msg: String)     = logAgregator("a~>"+msg)
 fun logInfo(msg: String)    = println("i~>"+msg)
-fun logError(msg: String)   = println("e~>"+msg)
+fun logError(msg: String)  {
+    repeat(5) {
+        println("e~>"+msg)
+    }
+}
+
 fun logGarbage(msg: String) = println("g~>"+msg)
 
 

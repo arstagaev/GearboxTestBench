@@ -1,11 +1,10 @@
-package ui.charts.new
-
 import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
@@ -25,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import org.jfree.chart.ChartFactory
 import org.jfree.chart.ChartPanel
 import org.jfree.chart.JFreeChart
@@ -33,19 +35,19 @@ import org.jfree.chart.plot.ValueMarker
 import org.jfree.chart.plot.XYPlot
 import org.jfree.data.xy.XYSeries
 import org.jfree.data.xy.XYSeriesCollection
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import utils.Dir2Reports
 import utils.logInfo
 import java.awt.BasicStroke
 import java.awt.Color as AwtColor
 import java.io.File
+import javax.swing.JFileChooser
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+private var file1 = mutableStateOf<File?>(null)
+private var file2 = mutableStateOf<File?>(null)
 
 // ---- Data Loading and Chart Creation ----
 
@@ -72,8 +74,8 @@ private fun createDatasetFromLogFile(file: File, prefix: String = ""): XYSeriesC
 // Creates a JFreeChart line chart from the given dataset.
 private fun createLineChart(dataset: XYSeriesCollection): JFreeChart {
     return ChartFactory.createXYLineChart(
-        "Telemetry",   // chart title
-        "Timeline",          // x-axis label
+        "Log File Line Chart",   // chart title
+        "Sample Index",          // x-axis label
         "Value",                 // y-axis label
         dataset,                 // data
         PlotOrientation.VERTICAL,
@@ -108,7 +110,7 @@ private fun computeSpectralData(series: XYSeries): XYSeries {
 // ---- Statistics & Correlation Helpers ----
 
 // Data class holding statistics for a series.
-private data class SeriesStats5(val min: Double, val max: Double, val avg: Double, val median: Double)
+private data class SeriesStats3(val min: Double, val max: Double, val avg: Double, val median: Double)
 
 // Rounds a value to a specified number of decimals.
 private fun roundValue(value: Double, decimals: Int): Double {
@@ -117,9 +119,9 @@ private fun roundValue(value: Double, decimals: Int): Double {
 }
 
 // Computes min, max, average, and median for a series, with rounding.
-private fun computeStatData(series: XYSeries): SeriesStats5 {
+private fun computeStatData(series: XYSeries): SeriesStats3 {
     val values = (0 until series.itemCount).map { series.getY(it).toDouble() }
-    if (values.isEmpty()) return SeriesStats5(0.0, 0.0, 0.0, 0.0)
+    if (values.isEmpty()) return SeriesStats3(0.0, 0.0, 0.0, 0.0)
     val minRaw = values.minOrNull() ?: 0.0
     val maxRaw = values.maxOrNull() ?: 0.0
     val avgRaw = values.average()
@@ -130,7 +132,7 @@ private fun computeStatData(series: XYSeries): SeriesStats5 {
     val max = roundValue(maxRaw, 2)
     val avg = roundValue(avgRaw, 3)
     val median = roundValue(medianRaw, 3)
-    return SeriesStats5(min, max, avg, median)
+    return SeriesStats3(min, max, avg, median)
 }
 
 // Computes Pearson correlation coefficient between two series.
@@ -155,32 +157,40 @@ private fun correlationColor(corr: Double): Color {
     return Color(red, green, 0f)
 }
 
-// ---- Threshold Parsing ----
-
-@Serializable
-data class ChartThresholds(val top: Double, val bottom: Double)
-
-// Parses a JSON file and returns the thresholds.
-private fun loadThresholdsFromJson(file: File): ChartThresholds {
-    val jsonString = file.readText()
-    // Optionally, configure the JSON parser (e.g., ignore unknown keys)
-    return Json { ignoreUnknownKeys = true }.decodeFromString(jsonString)
-}
-
-// ---- Main Composable ----
+// ---- Main Composable Function ----
 
 @Composable
 private fun JFreeChartDemoWithMultipleFiles() {
-    // Files for two datasets.
-    val file1 = File(Dir2Reports,"analyse_sample1.txt")
-    val file2 = File(Dir2Reports,"analyse_sample2.txt")
+    // File chooser: Let the user select the two files.
+    var file1 by remember { mutableStateOf<File?>(null) }
+    var file2 by remember { mutableStateOf<File?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // UI for file selection.
+    if (file1 == null || file2 == null) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Button(onClick = { file1 = chooseFile(File(System.getProperty("user.home"), "Documents")) }) {
+                Text(file1?.name ?: "Choose File 1")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { file2 = chooseFile(File(System.getProperty("user.home"), "Documents")) }) {
+                Text(file2?.name ?: "Choose File 2")
+            }
+        }
+        return
+    }
+
     // File for thresholds.
     val thresholdsFile = File("thresholds.json")
     val thresholds = remember { loadThresholdsFromJson(thresholdsFile) }
 
     // Create datasets.
-    val fullDataset1 = createDatasetFromLogFile(file1)  // keys: "Series 1", ..., "Series 16"
-    val fullDataset2 = createDatasetFromLogFile(file2, "F2 ") // keys: "F2 Series 1", ..., "F2 Series 16"
+    val fullDataset1 = createDatasetFromLogFile(file1!!, "")  // keys: "Series 1", ..., "Series 16"
+    val fullDataset2 = createDatasetFromLogFile(file2!!, "F2 ") // keys: "F2 Series 1", ..., "F2 Series 16"
 
     // Extract series.
     val allSeries1 = remember {
@@ -239,7 +249,6 @@ private fun JFreeChartDemoWithMultipleFiles() {
     val listState1 = rememberLazyListState()
     val listState2 = rememberLazyListState()
     val listStateCorr = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
     var scrollPositionSeries1 by remember { mutableStateOf(0) }
     var scrollPositionSeries2 by remember { mutableStateOf(0) }
     var scrollPositionCorr by remember { mutableStateOf(0) }
@@ -337,10 +346,7 @@ private fun JFreeChartDemoWithMultipleFiles() {
         }
         // Row for correlation between corresponding File 1 and File 2 series.
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Text(
-                "Correlation (Pearson) for corresponding series",
-                fontSize = TextUnit(12f, TextUnitType.Sp)
-            )
+            Text("Correlation (Pearson) for corresponding series", fontSize = TextUnit(12f, TextUnitType.Sp))
             LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(1.dp),
                 state = listStateCorr
@@ -369,9 +375,11 @@ private fun JFreeChartDemoWithMultipleFiles() {
                 }
             }
         }
-        // Row for threshold markers (if desired, you could display current thresholds here).
-        // For this example, we simply display the loaded thresholds.
-        Column(modifier = Modifier.fillMaxWidth().weight(0.5f), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Row for threshold markers display.
+        Column(
+            modifier = Modifier.fillMaxWidth().weight(0.5f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             val thresholds = remember { loadThresholdsFromJson(File("thresholds.json")) }
             Text("Thresholds: top = ${thresholds.top}, bottom = ${thresholds.bottom}", fontSize = TextUnit(12f, TextUnitType.Sp))
         }
@@ -381,7 +389,6 @@ private fun JFreeChartDemoWithMultipleFiles() {
             SwingPanel(
                 modifier = Modifier.fillMaxSize().weight(10f),
                 factory = {
-                    // Create chart, then add threshold markers.
                     val chart = createLineChart(currentDataset)
                     val plot = chart.plot as? XYPlot
                     if (plot != null) {
@@ -409,10 +416,65 @@ private fun PreviewJFreeChartDemoWithMultipleFiles() {
     }
 }
 
+private fun chooseFile(initialDirectory: File = File(System.getProperty("user.home"), "Documents")): File? {
+    val chooser = JFileChooser(initialDirectory)
+    chooser.dialogTitle = "Select File"
+    chooser.fileSelectionMode = JFileChooser.FILES_ONLY
+    val result = chooser.showOpenDialog(null)
+    if (result == JFileChooser.APPROVE_OPTION) {
+        val file = chooser.selectedFile
+        return if (checkFilePattern(file)) file else null
+    }
+    return null
+}
+
+private fun checkFilePattern(file: File): Boolean {
+    val lines = file.readLines().filter { it.isNotBlank() }
+    if (lines.size < 3) return false
+    if (!lines[0].startsWith("#") || !lines[1].startsWith("#")) return false
+    // Check each data line (starting at line index 2)
+    for (line in lines.drop(2)) {
+        val items = line.split(";").map { it.trim() }.filter { it.isNotEmpty() }
+        // Require exactly 16 columns.
+        if (items.size != 16) return false
+        if (!items.all { it.toIntOrNull() != null }) return false
+    }
+    return true
+}
+
+@Serializable
+private data class ChartThresholds(val top: Double = 1000.0, val bottom: Double = 100.0)
+
+private fun loadThresholdsFromJson(file: File): ChartThresholds {
+    val jsonString = file.readText()
+    return Json { ignoreUnknownKeys = true }.decodeFromString(jsonString)
+}
+
 private fun main() = application {
     Window(onCloseRequest = ::exitApplication, title = "Analysis") {
         MaterialTheme {
-            JFreeChartDemoWithMultipleFiles()
+            // File chooser UI for selecting files.
+            var file1Internal by remember { file1 }
+            var file2Internal by remember { file2 }
+            val coroutineScope = rememberCoroutineScope()
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (file1Internal == null || file2Internal == null) {
+                    Button(onClick = { file1.value = chooseFile() }) {
+                        Text(if (file1Internal == null) "Choose File 1" else file1Internal?.name ?: "no name")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { file2.value = chooseFile() }) {
+                        Text(if (file2Internal == null) "Choose File 2" else file2Internal?.name  ?: "no name")
+                    }
+                } else {
+                    JFreeChartDemoWithMultipleFiles()
+                }
+            }
         }
     }
 }
